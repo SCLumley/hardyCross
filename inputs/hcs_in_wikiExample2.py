@@ -17,19 +17,20 @@ edges = pd.DataFrame({
     'flow':[ 10, 5, 5, 0, 5, 5,10,10],
     'length':[5,10, 10, 10, 10,10,5,10],
     'diam':[ 0.3, 0.3, 0.1, 0.3, 0.1, 0.3, 0.3,0.3 ],
-    'pumpHeadGain':[ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,35 ],
+    'pumpHeadGain':[ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,35.0 ],
     'frictionFactor':[ 0.000001, 0.00294093238243111, 0.0147046619121555,0.00294093238243111, 0.0147046619121555, 0.00294093238243111,0.000001,0.0001],
-    'pipeRoughness':[ 0.001, 0.0026, 0.036,0.0026, 0.0026, 0.0026,0.001,0.001]
+    'pipeRoughness':[ 0.0001, 0.0026, 0.040,0.0026, 0.0026, 0.0026,0.0001,0.0001]
 })
  
 #Settings
 settings = {
-    "deltaConv": 1e-6,
-    "residualConv": -1,
+    "deltaConv": 1e-4,
+    "residualConv": 1e-4,
     "Printout": False,
     "maxruns": 100000,
     "dynamicFF": False,
     "monotonic": True,
     "outstring": "wiki_example_2",
-    "visualise": True
+    "visualise": True,
+    "accelerator" : 1.0
 }

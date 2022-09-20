@@ -11,5 +11,6 @@ settings = {
     "dynamicFF": True,
     "monotonic": False,
     "outstring": "wiki_example_2p2",
-    "visualise": True
+    "visualise": True,
+    "accelerator": 0.001
 }

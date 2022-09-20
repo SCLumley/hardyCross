@@ -13,18 +13,23 @@ defaultSettings = {
     "Printout":False,
     "maxruns": 100,
     "dynamicFF":False,
-    "monotonic": False
+    "monotonic": False,
+    "accelerator": 1.0
 }
 
 
 
 def solve(pipeNetwork,settings=defaultSettings):
     Printout = settings["Printout"]
-    dynamicFF = settings["dynamicFF"]
+#    dynamicFF = settings["dynamicFF"]
     deltaConv = settings["deltaConv"]
     residualConv = settings["residualConv"]
     maxruns = settings["maxruns"]
     monotonic = settings["monotonic"]
+
+    if Printout:
+        print("starting solve with settings:")
+        print(settings)
 
     lastDelta = 99999999999
     lastResidual = 999999999999
@@ -82,7 +87,6 @@ def iterate(pipeNetwork,settings=defaultSettings):
 def computeP(pipeNetwork,settings=defaultSettings):
     Printout = settings["Printout"]
 
-    ##TODO: add in a k*pumpheadgain vector to be subtracted from flows
     flows = np.array([[e[-1] ** 2 for e in pipeNetwork.edges(data='flow')]]).transpose()
 
 #    print("flows1",flows)
@@ -239,6 +243,7 @@ def computedF(pipeNetwork,settings=defaultSettings):
     return deltaFlowloop
 
 def updateFlows(pipeNetwork,deltaFlowLoops,settings=defaultSettings):
+    accelerator = settings["accelerator"]
 
     i = 0
     for loop in pipeNetwork.loops:
@@ -254,9 +259,9 @@ def updateFlows(pipeNetwork,deltaFlowLoops,settings=defaultSettings):
             CCWtpl = (nextnode, thisnode)
 
             if CWtpl in list(pipeNetwork.edges):
-                pipeNetwork.digraph[thisnode][nextnode]["flow"] -= delta
+                pipeNetwork.digraph[thisnode][nextnode]["flow"] -= delta * accelerator
             if CCWtpl in list(pipeNetwork.edges):
-                pipeNetwork.digraph[nextnode][thisnode]["flow"] += delta
+                pipeNetwork.digraph[nextnode][thisnode]["flow"] += delta * accelerator
         i += 1
 
 
@@ -314,10 +319,16 @@ class PipeNetwork:
 
     #TODO: additional formatting required to make csv outputs usable as inputs
     def nodeCSV(self):
-        return pd.DataFrame.from_dict(self.nodes, orient='index').to_csv()
+        nodeDF = pd.DataFrame.from_dict(self.nodes, orient='index')
+        nodeDF.reset_index(inplace=True)
+        nodeDF.rename(columns={'index': 'name'}, inplace=True)
+
+        return nodeDF.to_csv()
 
     def edgeCSV(self):
-        return nx.to_pandas_edgelist(self.digraph).to_csv()
+        edgeDF = nx.to_pandas_edgelist(self.digraph)
+        edgeDF.drop(columns=['source', 'target'],inplace=True)
+        return edgeDF.to_csv()
 
     def historyCSV(self):
             dfcolumns = ["Iteration","convcrit","residual"]

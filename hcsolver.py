@@ -116,7 +116,6 @@ def computeP(pipeNetwork,settings=defaultSettings):
     solution = np.linalg.lstsq(conductanceMat, (flows - pressureBoundaries), rcond=None)
     if Printout:
         print("pressure Residuals:", solution[1])
-    #    print("solution", solution)
     pressures = solution[0]
 
     i = 0
@@ -317,7 +316,6 @@ class PipeNetwork:
                              nx.to_pandas_edgelist(self.digraph)])
 
 
-    #TODO: additional formatting required to make csv outputs usable as inputs
     def nodeCSV(self):
         nodeDF = pd.DataFrame.from_dict(self.nodes, orient='index')
         nodeDF.reset_index(inplace=True)

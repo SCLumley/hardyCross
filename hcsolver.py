@@ -145,8 +145,8 @@ def computedF(pipeNetwork,settings=defaultSettings):
         diam = pipeNetwork.edges[edge]["diam"]
         if dynamicFF:
             pipeRoughness = pipeNetwork.edges[edge]["pipeRoughness"]
-            pipeNetwork.edges[edge]["frictionFactor"] = fluidmech.calcff(fluidmech.calcRe(flow, diam), pipeRoughness,
-                                                                         diam)
+            pipeNetwork.edges[edge]["frictionFactor"] = fluidmech.calcff(pipeRoughness, diam,
+                                                                         fluidmech.calcRe(diam, flow))
         ff = pipeNetwork.edges[edge]["frictionFactor"]
         k = fluidmech.calck(length, diam, ff)
         pipeNetwork.edges[edge]['k'] = k
@@ -161,8 +161,8 @@ def computedF(pipeNetwork,settings=defaultSettings):
         diam = pipeNetwork.uedges[edge]["diam"]
         if dynamicFF:
             pipeRoughness = pipeNetwork.uedges[edge]["pipeRoughness"]
-            pipeNetwork.uedges[edge]["frictionFactor"] = fluidmech.calcff(fluidmech.calcRe(flow, diam), pipeRoughness,
-                                                                          diam)
+            pipeNetwork.uedges[edge]["frictionFactor"] = fluidmech.calcff(pipeRoughness,
+                                                                          diam, fluidmech.calcRe(diam, flow))
         ff = pipeNetwork.uedges[edge]["frictionFactor"]
         k = fluidmech.calck(length, diam, ff)
         pipeNetwork.uedges[edge]['k'] = k
@@ -222,8 +222,16 @@ def computedF(pipeNetwork,settings=defaultSettings):
                 nextnode = loop[0]
 
             flow = pipeNetwork.ugraph[thisnode][nextnode]["flow"]
-            k = pipeNetwork.ugraph[thisnode][nextnode]["k"]
-            dhl = fluidmech.calcdhl(k, flow)
+
+            if dynamicFF:
+                diam = pipeNetwork.ugraph[thisnode][nextnode]["diam"]
+                length = pipeNetwork.ugraph[thisnode][nextnode]["length"]
+                eps = pipeNetwork.ugraph[thisnode][nextnode]["pipeRoughness"]
+                pump = pipeNetwork.ugraph[thisnode][nextnode]['pumpHeadGain']
+                dhl = fluidmech.numerical_dhldQ(flow,length,diam,eps,pump,997.77,1.0016E-3,1e-3)
+            else:
+                k = pipeNetwork.ugraph[thisnode][nextnode]["k"]
+                dhl = fluidmech.calcdhl(k, flow)
             #            print(thisnode, nextnode, dhl)
             drhlLoop.append(dhl)
         drhlLoops.append(drhlLoop)

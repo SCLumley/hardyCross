@@ -31,15 +31,23 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    settings = {}
+    defaultSettings = hc.defaultSettings
+    settings={}
     nodes = None
     edges = None
+
 
     basedir = os.path.dirname(os.path.realpath(__file__))
     input = open(args.input, "r")
     jobdir = os.path.dirname(os.path.realpath(args.input))
     vars = input.read()
     exec(vars)
+
+    inputSettings = settings.copy()
+    settings=defaultSettings
+    settings.update(inputSettings)
+
+
 
     if args.nodeInput is not None:
         nodes = pd.read_csv(args.nodeInput)
@@ -74,4 +82,4 @@ if __name__ == '__main__':
 
     if settings["visualise"]:
         pngOutput = "out_" + settings["outstring"] + "_vis.png"
-        pipenetwork.visualise(os.path.join(jobdir,pngOutput))
+        pipenetwork.visualise(os.path.join(jobdir,pngOutput),settings)

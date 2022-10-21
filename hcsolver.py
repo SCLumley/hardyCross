@@ -14,7 +14,9 @@ defaultSettings = {
     "maxruns": 100,
     "dynamicFF":False,
     "monotonic": False,
-    "accelerator": 1.0
+    "accelerator": 1.0,
+    "visualise": False,
+    "visDisplayLvl": 1
 }
 
 
@@ -306,14 +308,39 @@ class PipeNetwork:
         totDelta = sum(abs(delta) for delta in deltaFlowLoop)
         return totDelta
 
-    def visualise(self,filepath):
+    def visualise(self,filepath,settings=defaultSettings):
+
+        plt.rcParams["figure.figsize"] = (16, 9)
+
         pos = nx.kamada_kawai_layout(self.digraph, weight='length')
         edgeWidths = [self.digraph[u][v]['flow'] / (0.25 * nx.to_pandas_edgelist(self.digraph)['flow'].max()) for u, v in self.edges()]
         pressures = list(nx.get_node_attributes(self.digraph, 'pressure').values())
         nodeColours = [n / pd.DataFrame.from_dict(self.nodes, orient='index')['pressure'].max() for n in pressures]
 
         # Plot it, providing a continuous color scale with cmap:
-        nx.draw(self.digraph, pos, with_labels=True, node_color=nodeColours, width=edgeWidths, cmap=plt.cm.Blues, arrows=True)
+        nx.draw(self.digraph, pos, with_labels=False, node_color=nodeColours, width=edgeWidths, cmap=plt.cm.Blues, arrows=True)
+
+        edge_labels = {}
+        node_labels = {}
+
+        if settings["visDisplayLvl"] == 1:
+            edge_labels = dict(
+                [((n1, n2), d['name'] )
+                 for n1, n2, d in self.digraph.edges(data=True)])
+
+            node_labels = dict([(n, n )
+                                for n, d in self.digraph.nodes(data=True)])
+
+        if settings["visDisplayLvl"] == 2:
+            edge_labels = dict([((n1, n2), d['name'] + "\nQ:" + "{:.2e}".format(d['flow']) + "\nhl:" + "{:.2e}".format(abs(d['headloss'])) )
+                                for n1, n2, d in self.digraph.edges(data=True)])
+
+            node_labels = dict([( n, n + "\nP:" + "{:.2e}".format(d['pressure']) )
+                                for n, d in self.digraph.nodes(data=True)])
+
+        if settings["visDisplayLvl"] > 0:
+            nx.draw_networkx_edge_labels(self.digraph, pos, edge_labels=edge_labels)
+            nx.draw_networkx_labels(self.digraph, pos, labels=node_labels)
         plt.savefig(filepath)
 
     def updateHistory(self):

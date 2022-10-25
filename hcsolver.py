@@ -46,23 +46,24 @@ def solve(pipeNetwork, settings=defaultSettings):
                 print("Iteration: ", iterationCounter)
 
             (currentDelta, currentResidual) = iterate(pipeNetwork, settings)
+            print("Iteration, convergence criterion, Residual:", iterationCounter, currentDelta, currentResidual)
 
             if (currentDelta < deltaConv or deltaConv < 0) and (currentResidual < residualConv or residualConv < 0):
-                print("convergence criterion reached")
+                print("Success! Convergence criterion reached")
                 run = False
             if iterationCounter > maxruns:
                 # Break if iterations maxes out.
-                print("Error! Max Runs reached.")
+                print("Abort! Max Runs reached.")
                 run = False
             if monotonic and (currentDelta > lastDelta):
                 # break if monotonically decreasing convergence is expected
-                print("Error!, convergence is no longer monotonically decreasing.")
+                print("Abort! Convergence is no longer monotonically decreasing.")
                 run = False
 
             lastDelta = currentDelta
             lastResidual = currentResidual
 
-            print("Iteration, convergence criterion, Residual:", iterationCounter, lastDelta, lastResidual)
+
             # printout Data
             if Printout:
                 for node in pipeNetwork.nodes:
@@ -74,7 +75,7 @@ def solve(pipeNetwork, settings=defaultSettings):
 
             iterationCounter += 1
     else:
-        print("Warning! mass flows are not balanced: ", mce)
+        raise ValueError("Error! mass flows are not balanced: ", mce)
 
 
 def iterate(pipeNetwork, settings=defaultSettings):
@@ -83,6 +84,10 @@ def iterate(pipeNetwork, settings=defaultSettings):
     residual = computeP(pipeNetwork, settings)
     totDelta = sum(abs(delta) for delta in deltaFlowLoops)
     pipeNetwork.appendHistory(totDelta, residual)
+
+    if math.isinf(totDelta) or math.isnan(totDelta) or math.isinf(residual) or math.isnan(residual):
+        raise ValueError('Error! System has become numerically unstable.')
+
     return (totDelta, residual)
 
 
@@ -288,8 +293,8 @@ class PipeNetwork:
 
         # TODO: Write input checker
         # mandatoryAttributes = ["to","from","name","flow","length","daim"]
-        # mustHaveOneAttrubte = ["pipeRoughness","frictionFactor"]
-        # optionalAttrubutes = ["pumpHeadGain"]
+        # mustHaveOneAttribute = ["pipeRoughness","frictionFactor"]
+        # optionalAttributes = ["pumpHeadGain"]
 
         self.digraph = nx.from_pandas_edgelist(edges, 'from', 'to',
                                                edges.columns.values.tolist(),

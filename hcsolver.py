@@ -5,29 +5,29 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import pandas as pd
 
-
-
 defaultSettings = {
-    "deltaConv":1e-3,
-    "residualConv":-1,
-    "Printout":False,
+    "deltaConv": 1e-3,
+    "residualConv": -1,
+    "Printout": False,
     "maxruns": 100,
-    "dynamicFF":False,
+    "dynamicFF": False,
     "monotonic": False,
     "accelerator": 1.0,
     "visualise": False,
-    "visDisplayLvl": 1
+    "visDisplayLvl": 1,
+    "rho": fluidmech.stprho,
+    "mu": fluidmech.stpmu
 }
 
 
-
-def solve(pipeNetwork,settings=defaultSettings):
+def solve(pipeNetwork, settings=defaultSettings):
     Printout = settings["Printout"]
-#    dynamicFF = settings["dynamicFF"]
+
     deltaConv = settings["deltaConv"]
     residualConv = settings["residualConv"]
     maxruns = settings["maxruns"]
     monotonic = settings["monotonic"]
+    rho = settings["rho"]
 
     if Printout:
         print("starting solve with settings:")
@@ -36,16 +36,16 @@ def solve(pipeNetwork,settings=defaultSettings):
     lastDelta = 99999999999
     lastResidual = 999999999999
 
-    mce = pipeNetwork.getMCE()[0]
-    if math.isclose(mce,0,abs_tol=deltaConv):
+    mce = pipeNetwork.getMCE(rho)[0]
+    if math.isclose(mce, 0, abs_tol=deltaConv):
         run = True
         iterationCounter = 0
-        while(run):
+        while (run):
 
             if Printout:
                 print("Iteration: ", iterationCounter)
 
-            (currentDelta,currentResidual) = iterate(pipeNetwork,settings)
+            (currentDelta, currentResidual) = iterate(pipeNetwork, settings)
 
             if (currentDelta < deltaConv or deltaConv < 0) and (currentResidual < residualConv or residualConv < 0):
                 print("convergence criterion reached")
@@ -74,33 +74,33 @@ def solve(pipeNetwork,settings=defaultSettings):
 
             iterationCounter += 1
     else:
-        print("Warning! mass flows are not balanced: ",mce)
+        print("Warning! mass flows are not balanced: ", mce)
 
-def iterate(pipeNetwork,settings=defaultSettings):
 
-    deltaFlowLoops=computedF(pipeNetwork,settings)
-    updateFlows(pipeNetwork,deltaFlowLoops,settings)
-    residual = computeP(pipeNetwork,settings)
+def iterate(pipeNetwork, settings=defaultSettings):
+    deltaFlowLoops = computedF(pipeNetwork, settings)
+    updateFlows(pipeNetwork, deltaFlowLoops, settings)
+    residual = computeP(pipeNetwork, settings)
     totDelta = sum(abs(delta) for delta in deltaFlowLoops)
-    pipeNetwork.appendHistory(totDelta,residual)
-    return (totDelta,residual)
+    pipeNetwork.appendHistory(totDelta, residual)
+    return (totDelta, residual)
 
 
-def computeP(pipeNetwork,settings=defaultSettings):
+def computeP(pipeNetwork, settings=defaultSettings):
     Printout = settings["Printout"]
 
     flows = np.array([[e[-1] ** 2 for e in pipeNetwork.edges(data='flow')]]).transpose()
 
-#    print("flows1",flows)
-    hydraulicResistances = np.array([[k[-1]  for k in pipeNetwork.edges(data='c')]]).transpose()
-#    print("hydraulicRes",hydraulicResistances)
-    pumpheadGains = np.array([[p[-1]  for p in pipeNetwork.edges(data='pumpHeadGain')]]).transpose()
-#    print("pumpheadGains",pumpheadGains)
+    #    print("flows1",flows)
+    hydraulicResistances = np.array([[k[-1] for k in pipeNetwork.edges(data='c')]]).transpose()
+    #    print("hydraulicRes",hydraulicResistances)
+    pumpheadGains = np.array([[p[-1] for p in pipeNetwork.edges(data='pumpHeadGain')]]).transpose()
+    #    print("pumpheadGains",pumpheadGains)
 
-#    print("product", hydraulicResistances * pumpheadGains)
+    #    print("product", hydraulicResistances * pumpheadGains)
     flows = flows + hydraulicResistances * pumpheadGains
 
-#    print("flows2",flows)
+    #    print("flows2",flows)
 
     conductanceMat = nx.incidence_matrix(pipeNetwork.digraph, oriented=True, weight='c').toarray().transpose()
 
@@ -130,15 +130,16 @@ def computeP(pipeNetwork,settings=defaultSettings):
         i += 1
     return solution[1][0]
 
-def computedF(pipeNetwork,settings=defaultSettings):
+
+def computedF(pipeNetwork, settings=defaultSettings):
     Printout = settings["Printout"]
     dynamicFF = settings["dynamicFF"]
+    rho = settings["rho"]
+    mu = settings["mu"]
     deltaConv = settings["deltaConv"]
     residualConv = settings["residualConv"]
     maxruns = settings["maxruns"]
     monotonic = settings["monotonic"]
-
-
 
     ##STEP 3.1 for every edge, update hydraulic resistance and conductance (k and c where k=1/c)
     for edge in pipeNetwork.edges:
@@ -148,7 +149,9 @@ def computedF(pipeNetwork,settings=defaultSettings):
         if dynamicFF:
             pipeRoughness = pipeNetwork.edges[edge]["pipeRoughness"]
             pipeNetwork.edges[edge]["frictionFactor"] = fluidmech.calcff(pipeRoughness, diam,
-                                                                         fluidmech.calcRe(diam, flow))
+                                                                         fluidmech.calcRe(diam,
+                                                                                          fluidmech.calcmdot(flow, rho),
+                                                                                          mu))
         ff = pipeNetwork.edges[edge]["frictionFactor"]
         k = fluidmech.calck(length, diam, ff)
         pipeNetwork.edges[edge]['k'] = k
@@ -163,8 +166,10 @@ def computedF(pipeNetwork,settings=defaultSettings):
         diam = pipeNetwork.uedges[edge]["diam"]
         if dynamicFF:
             pipeRoughness = pipeNetwork.uedges[edge]["pipeRoughness"]
-            pipeNetwork.uedges[edge]["frictionFactor"] = fluidmech.calcff(pipeRoughness,
-                                                                          diam, fluidmech.calcRe(diam, flow))
+            pipeNetwork.uedges[edge]["frictionFactor"] = fluidmech.calcff(pipeRoughness, diam,
+                                                                          fluidmech.calcRe(diam,
+                                                                                           fluidmech.calcmdot(flow,
+                                                                                                              rho), mu))
         ff = pipeNetwork.uedges[edge]["frictionFactor"]
         k = fluidmech.calck(length, diam, ff)
         pipeNetwork.uedges[edge]['k'] = k
@@ -230,7 +235,7 @@ def computedF(pipeNetwork,settings=defaultSettings):
                 length = pipeNetwork.ugraph[thisnode][nextnode]["length"]
                 eps = pipeNetwork.ugraph[thisnode][nextnode]["pipeRoughness"]
                 pump = pipeNetwork.ugraph[thisnode][nextnode]['pumpHeadGain']
-                dhl = fluidmech.numerical_dhldQ(flow,length,diam,eps,pump,997.77,1.0016E-3,1e-3)
+                dhl = fluidmech.numerical_dhldQ(flow, length, diam, eps, pump, rho, mu, 1e-3)
             else:
                 k = pipeNetwork.ugraph[thisnode][nextnode]["k"]
                 dhl = fluidmech.calcdhl(k, flow)
@@ -251,7 +256,8 @@ def computedF(pipeNetwork,settings=defaultSettings):
         print(deltaFlowloop)
     return deltaFlowloop
 
-def updateFlows(pipeNetwork,deltaFlowLoops,settings=defaultSettings):
+
+def updateFlows(pipeNetwork, deltaFlowLoops, settings=defaultSettings):
     accelerator = settings["accelerator"]
 
     i = 0
@@ -274,31 +280,33 @@ def updateFlows(pipeNetwork,deltaFlowLoops,settings=defaultSettings):
         i += 1
 
 
+
+
+
 class PipeNetwork:
     def __init__(self, nodes: pd.DataFrame, edges: pd.DataFrame):
 
-        #TODO: Write input checker
+        # TODO: Write input checker
         # mandatoryAttributes = ["to","from","name","flow","length","daim"]
         # mustHaveOneAttrubte = ["pipeRoughness","frictionFactor"]
         # optionalAttrubutes = ["pumpHeadGain"]
 
-        self.digraph  = nx.from_pandas_edgelist(edges, 'from', 'to',
-                                       edges.columns.values.tolist(),
-                                       create_using=nx.DiGraph())
+        self.digraph = nx.from_pandas_edgelist(edges, 'from', 'to',
+                                               edges.columns.values.tolist(),
+                                               create_using=nx.DiGraph())
 
         nx.set_node_attributes(self.digraph, nodes.set_index('name').to_dict('index'))
 
         self.ugraph = nx.from_pandas_edgelist(edges, 'from', 'to',
-                                        edges.columns.values.tolist(),
-                                        create_using=nx.Graph())
+                                              edges.columns.values.tolist(),
+                                              create_using=nx.Graph())
         self.loops = list(nx.cycle_basis(self.ugraph))
-        self.edges=self.digraph.edges
-        self.nodes=self.digraph.nodes
-        self.uedges=self.ugraph.edges
+        self.edges = self.digraph.edges
+        self.nodes = self.digraph.nodes
+        self.uedges = self.ugraph.edges
 
         self.history = []
-        self.appendHistory(999999,9999999)
-
+        self.appendHistory(999999, 9999999)
 
     def residual(self):
         return computeP(self)[1][0]
@@ -308,34 +316,37 @@ class PipeNetwork:
         totDelta = sum(abs(delta) for delta in deltaFlowLoop)
         return totDelta
 
-    def visualise(self,filepath,settings=defaultSettings):
+    def visualise(self, filepath, settings=defaultSettings):
 
         plt.rcParams["figure.figsize"] = (16, 9)
 
         pos = nx.kamada_kawai_layout(self.digraph, weight='length')
-        edgeWidths = [self.digraph[u][v]['flow'] / (0.25 * nx.to_pandas_edgelist(self.digraph)['flow'].max()) for u, v in self.edges()]
+        edgeWidths = [self.digraph[u][v]['flow'] / (0.25 * nx.to_pandas_edgelist(self.digraph)['flow'].max()) for u, v
+                      in self.edges()]
         pressures = list(nx.get_node_attributes(self.digraph, 'pressure').values())
         nodeColours = [n / pd.DataFrame.from_dict(self.nodes, orient='index')['pressure'].max() for n in pressures]
 
         # Plot it, providing a continuous color scale with cmap:
-        nx.draw(self.digraph, pos, with_labels=False, node_color=nodeColours, width=edgeWidths, cmap=plt.cm.Blues, arrows=True)
+        nx.draw(self.digraph, pos, with_labels=False, node_color=nodeColours, width=edgeWidths, cmap=plt.cm.Blues,
+                arrows=True)
 
         edge_labels = {}
         node_labels = {}
 
         if settings["visDisplayLvl"] == 1:
             edge_labels = dict(
-                [((n1, n2), d['name'] )
+                [((n1, n2), d['name'])
                  for n1, n2, d in self.digraph.edges(data=True)])
 
-            node_labels = dict([(n, n )
+            node_labels = dict([(n, n)
                                 for n, d in self.digraph.nodes(data=True)])
 
         if settings["visDisplayLvl"] == 2:
-            edge_labels = dict([((n1, n2), d['name'] + "\nQ:" + "{:.2e}".format(d['flow']) + "\nhl:" + "{:.2e}".format(abs(d['headloss'])) )
+            edge_labels = dict([((n1, n2), d['name'] + "\nQ:" + "{:.2e}".format(d['flow']) + "\nhl:" + "{:.2e}".format(
+                abs(d['headloss'])))
                                 for n1, n2, d in self.digraph.edges(data=True)])
 
-            node_labels = dict([( n, n + "\nP:" + "{:.2e}".format(d['pressure']) )
+            node_labels = dict([(n, n + "\nP:" + "{:.2e}".format(d['pressure']))
                                 for n, d in self.digraph.nodes(data=True)])
 
         if settings["visDisplayLvl"] > 0:
@@ -344,12 +355,12 @@ class PipeNetwork:
         plt.savefig(filepath)
 
     def updateHistory(self):
-        self.history.append([self.deltaFlow(), self.residual(), pd.DataFrame.from_dict(self.nodes, orient='index'), nx.to_pandas_edgelist(self.digraph)])
-
-    def appendHistory(self,deltaFlow,residual):
-        self.history.append([deltaFlow, residual, pd.DataFrame.from_dict(self.nodes, orient='index'),
+        self.history.append([self.deltaFlow(), self.residual(), pd.DataFrame.from_dict(self.nodes, orient='index'),
                              nx.to_pandas_edgelist(self.digraph)])
 
+    def appendHistory(self, deltaFlow, residual):
+        self.history.append([deltaFlow, residual, pd.DataFrame.from_dict(self.nodes, orient='index'),
+                             nx.to_pandas_edgelist(self.digraph)])
 
     def nodeCSV(self):
         nodeDF = pd.DataFrame.from_dict(self.nodes, orient='index')
@@ -360,42 +371,41 @@ class PipeNetwork:
 
     def edgeCSV(self):
         edgeDF = nx.to_pandas_edgelist(self.digraph)
-        edgeDF.drop(columns=['source', 'target'],inplace=True)
+        edgeDF.drop(columns=['source', 'target'], inplace=True)
         return edgeDF.to_csv()
 
     def historyCSV(self):
-            dfcolumns = ["Iteration","convcrit","residual"]
-            for node in self.nodes:
-               dfcolumns.append(str(node) + '_P')
-            for edge in self.edges:
-                dfcolumns.append(str(self.edges[edge]["name"]) + '_F')
+        dfcolumns = ["Iteration", "convcrit", "residual"]
+        for node in self.nodes:
+            dfcolumns.append(str(node) + '_P')
+        for edge in self.edges:
+            dfcolumns.append(str(self.edges[edge]["name"]) + '_F')
 
-            unpackedData=[]
-            i=0
-            for iteration in self.history:
-                unpackedIteration=[i,iteration[0],iteration[1]]
-                unpackedIteration += iteration[2]["pressure"].tolist() + iteration[3]["flow"].tolist()
-                #print(unpackedIteration)
-                unpackedData.append(unpackedIteration)
-                i+=1
-            formatteddata = unpackedData
-            historyDataframe = pd.DataFrame(formatteddata,columns=dfcolumns)
-            return historyDataframe.to_csv()
+        unpackedData = []
+        i = 0
+        for iteration in self.history:
+            unpackedIteration = [i, iteration[0], iteration[1]]
+            unpackedIteration += iteration[2]["pressure"].tolist() + iteration[3]["flow"].tolist()
+            # print(unpackedIteration)
+            unpackedData.append(unpackedIteration)
+            i += 1
+        formatteddata = unpackedData
+        historyDataframe = pd.DataFrame(formatteddata, columns=dfcolumns)
+        return historyDataframe.to_csv()
 
-
-    def getMCE(self):
+    def getMCE(self,rho):
         totalFlow = 0
         debugstrlst = []
         for node in self.nodes:
             if 'fboundary' not in self.nodes[node].keys():
                 flowaccumulator = 0
             else:
-                flowaccumulator = self.nodes[node]['flow']
+                flowaccumulator = fluidmech.calcmdot(self.nodes[node]['flow'],rho)
             for frm, to, edat in self.digraph.in_edges(node, data=True):
-                flowaccumulator += edat['flow']
+                flowaccumulator += fluidmech.calcmdot(edat['flow'],rho)
             for frm, to, edat in self.digraph.out_edges(node, data=True):
-                flowaccumulator -= edat['flow']
+                flowaccumulator -= fluidmech.calcmdot(edat['flow'],rho)
             debugstr = str(node) + ":" + str(flowaccumulator)
             debugstrlst.append(debugstr)
             totalFlow += flowaccumulator
-        return (totalFlow,debugstrlst)
+        return (totalFlow, debugstrlst)

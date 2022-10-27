@@ -172,13 +172,15 @@ def computedF(pipeNetwork, settings=defaultSettings):
     maxruns = settings["maxruns"]
     monotonic = settings["monotonic"]
 
-    ##STEP 3.1 for every edge, update hydraulic resistance and conductance (k and c where k=1/c)
+    ##STEP 3.1 for every edge, update hydraulic resistance and conductance (k and c where k=1/c),
+    # and calculate headlosses and derivatives
     for edge in pipeNetwork.edges:
         flow = pipeNetwork.edges[edge]["flow"]
         length = pipeNetwork.edges[edge]["length"]
         diam = pipeNetwork.edges[edge]["diam"]
+        pump = pipeNetwork.edges[edge]["pumpHeadGain"]
+        pipeRoughness = pipeNetwork.edges[edge]["pipeRoughness"]
         if dynamicFF:
-            pipeRoughness = pipeNetwork.edges[edge]["pipeRoughness"]
             pipeNetwork.edges[edge]["frictionFactor"] = fluidmech.calcff(pipeRoughness, diam,
                                                                          fluidmech.calcRe(diam,
                                                                                           fluidmech.calcmdot(flow, rho),
@@ -186,28 +188,36 @@ def computedF(pipeNetwork, settings=defaultSettings):
         ff = pipeNetwork.edges[edge]["frictionFactor"]
         k = fluidmech.calck(length, diam, ff)
         pipeNetwork.edges[edge]['k'] = k
+        hl = fluidmech.calchl(k, flow, pump)
+        pipeNetwork.edges[edge]["headloss"] = hl
+        if dynamicFF:
+            dhl = fluidmech.numerical_dhldQ(flow, length, diam, pipeRoughness, pump, rho, mu, 1e-3)
+        else:
+            dhl = fluidmech.calcdhl(k, flow)
+        pipeNetwork.edges[edge]["dhl"] = dhl
+
         if ff != 0 and length != 0:
             pipeNetwork.edges[edge]['c'] = -1 / k
         else:
             pipeNetwork.edges[edge]['c'] = 1.7976931348623158e+308
 
-    for edge in pipeNetwork.uedges:
-        flow = pipeNetwork.uedges[edge]["flow"]
-        length = pipeNetwork.uedges[edge]["length"]
-        diam = pipeNetwork.uedges[edge]["diam"]
-        if dynamicFF:
-            pipeRoughness = pipeNetwork.uedges[edge]["pipeRoughness"]
-            pipeNetwork.uedges[edge]["frictionFactor"] = fluidmech.calcff(pipeRoughness, diam,
-                                                                          fluidmech.calcRe(diam,
-                                                                                           fluidmech.calcmdot(flow,
-                                                                                                              rho), mu))
-        ff = pipeNetwork.uedges[edge]["frictionFactor"]
-        k = fluidmech.calck(length, diam, ff)
-        pipeNetwork.uedges[edge]['k'] = k
-        if ff != 0 and length != 0:
-            pipeNetwork.uedges[edge]['c'] = -1 / k
-        else:
-            pipeNetwork.uedges[edge]['c'] = 1.7976931348623158e+308
+    # for edge in pipeNetwork.uedges:
+    #     flow = pipeNetwork.uedges[edge]["flow"]
+    #     length = pipeNetwork.uedges[edge]["length"]
+    #     diam = pipeNetwork.uedges[edge]["diam"]
+    #     if dynamicFF:
+    #         pipeRoughness = pipeNetwork.uedges[edge]["pipeRoughness"]
+    #         pipeNetwork.uedges[edge]["frictionFactor"] = fluidmech.calcff(pipeRoughness, diam,
+    #                                                                       fluidmech.calcRe(diam,
+    #                                                                                        fluidmech.calcmdot(flow,
+    #                                                                                                           rho), mu))
+    #     ff = pipeNetwork.uedges[edge]["frictionFactor"]
+    #     k = fluidmech.calck(length, diam, ff)
+    #     pipeNetwork.uedges[edge]['k'] = k
+    #     if ff != 0 and length != 0:
+    #         pipeNetwork.uedges[edge]['c'] = -1 / k
+    #     else:
+    #         pipeNetwork.uedges[edge]['c'] = 1.7976931348623158e+308
 
     ##STEP 3.2 for each loop, determine head loss (kQ^n) in clockwise and counterclockwise directions.
     ##CW and CCW is determined as following and anti-following the direction of the graph.
@@ -226,28 +236,15 @@ def computedF(pipeNetwork, settings=defaultSettings):
             CCWtpl = (nextnode, thisnode)
 
             if CWtpl in list(pipeNetwork.edges):
-                cwflow = pipeNetwork.digraph[thisnode][nextnode]["flow"]
-                pump = pipeNetwork.digraph[thisnode][nextnode]['pumpHeadGain']
-                k = pipeNetwork.digraph[thisnode][nextnode]['k']
-                hl = fluidmech.calchl(k, cwflow, pump)
+                hl = pipeNetwork.digraph[thisnode][nextnode]["headloss"]
                 hlLoop.append(hl)
-                pipeNetwork.digraph[thisnode][nextnode]["headloss"] = hl
             if CCWtpl in list(pipeNetwork.edges):
-                ccwflow = pipeNetwork.digraph[nextnode][thisnode]["flow"]
-                pump = pipeNetwork.digraph[nextnode][thisnode]['pumpHeadGain']
-                k = pipeNetwork.digraph[nextnode][thisnode]['k']
-                hl = fluidmech.calchl(k, ccwflow, pump)
+                hl = pipeNetwork.digraph[nextnode][thisnode]["headloss"]
                 hlLoop.append(-hl)
-                pipeNetwork.digraph[nextnode][thisnode]["headloss"] = -hl
         hlLoops.append(hlLoop)
 
-    #small step just to update headlosses for any edges not on a loop:
-    for edge in pipeNetwork.edges:
-        if edge not in pipeNetwork.edgesOnLoop:
-            pipeNetwork.edges[edge]["headloss"] = fluidmech.calchl(pipeNetwork.edges[edge]["k"], pipeNetwork.edges[edge]["flow"], pipeNetwork.edges[edge]["pumpHeadGain"])
 
-
-    ##STEP 4 For each loop, find sum head losses (sum kQ^n)
+    ##STEP 4 For each loop, sum head losses (sum kQ^n)
     sumhlLoops = []
     for loop in hlLoops:
         sumhl = sum(loop)
@@ -264,33 +261,22 @@ def computedF(pipeNetwork, settings=defaultSettings):
                 nextnode = loop[loop.index(node) + 1]
             else:
                 nextnode = loop[0]
-
-            flow = pipeNetwork.ugraph[thisnode][nextnode]["flow"]
-
-            if dynamicFF:
-                diam = pipeNetwork.ugraph[thisnode][nextnode]["diam"]
-                length = pipeNetwork.ugraph[thisnode][nextnode]["length"]
-                eps = pipeNetwork.ugraph[thisnode][nextnode]["pipeRoughness"]
-                pump = pipeNetwork.ugraph[thisnode][nextnode]['pumpHeadGain']
-                dhl = fluidmech.numerical_dhldQ(flow, length, diam, eps, pump, rho, mu, 1e-3)
-            else:
-                k = pipeNetwork.ugraph[thisnode][nextnode]["k"]
-                dhl = fluidmech.calcdhl(k, flow)
-            #            print(thisnode, nextnode, dhl)
+            dhl = pipeNetwork.ugraph[thisnode][nextnode]["dhl"]
             drhlLoop.append(dhl)
         drhlLoops.append(drhlLoop)
 
-    sumdrhlLoops = []
+    sumdhlLoops = []
+
     for loop in drhlLoops:
-        sumdrhlLoops.append(sum(loop))
+        sumdhlLoops.append(sum(loop))
 
     ##STEP 6 Determine change in flow given as output of Step 4 over output of Step 5
     deltaFlowloop = []
     for i in range(0, len(pipeNetwork.loops)):
-        delta = sumhlLoops[i] / sumdrhlLoops[i]
+        delta = sumhlLoops[i] / sumdhlLoops[i]
         deltaFlowloop.append(delta)
     if Printout:
-        print(deltaFlowloop)
+        print("deltaFlowLoop:",deltaFlowloop)
     return deltaFlowloop
 
 
@@ -339,9 +325,12 @@ class PipeNetwork:
 
         nx.set_node_attributes(self.digraph, nodes.set_index('name').to_dict('index'))
 
-        self.ugraph = nx.from_pandas_edgelist(edges, 'from', 'to',
-                                              edges.columns.values.tolist(),
-                                              create_using=nx.Graph())
+        self.ugraph = self.digraph.to_undirected(as_view=True)
+
+            #nx.from_pandas_edgelist(edges, 'from', 'to',
+            #                                  edges.columns.values.tolist(),
+            #                                  create_using=nx.Graph())
+
         self.loops = list(nx.cycle_basis(self.ugraph))
         self.edges = self.digraph.edges
         self.nodes = self.digraph.nodes

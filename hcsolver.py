@@ -22,16 +22,42 @@ defaultSettings = {
 
 def solve(pipeNetwork, settings=defaultSettings):
     Printout = settings["Printout"]
-
     deltaConv = settings["deltaConv"]
     residualConv = settings["residualConv"]
     maxruns = settings["maxruns"]
     monotonic = settings["monotonic"]
     rho = settings["rho"]
+    mu = settings["mu"]
 
     if Printout:
         print("starting solve with settings:")
         print(settings)
+
+    # setting up some initial values:
+    for edge in pipeNetwork.edges:
+        if 'frictionFactor' not in pipeNetwork.edges[edge]:
+            if Printout:
+                print("Initial friction factor not specified. Calculating from pipe characteristics and initial flow.")
+            flow = pipeNetwork.edges[edge]["flow"]
+            diam = pipeNetwork.edges[edge]["diam"]
+            pipeRoughness = pipeNetwork.edges[edge]["pipeRoughness"]
+            ff = fluidmech.calcff(pipeRoughness, diam, fluidmech.calcRe(diam, fluidmech.calcmdot(flow, rho), mu))
+            pipeNetwork.edges[edge]["frictionFactor"] = ff
+        pipeNetwork.edges[edge]["headloss"] = 0
+
+    for edge in pipeNetwork.uedges:
+        if 'frictionFactor' not in pipeNetwork.uedges[edge]:
+            flow = pipeNetwork.uedges[edge]["flow"]
+            diam = pipeNetwork.uedges[edge]["diam"]
+            pipeRoughness = pipeNetwork.uedges[edge]["pipeRoughness"]
+            ff = fluidmech.calcff(pipeRoughness, diam, fluidmech.calcRe(diam, fluidmech.calcmdot(flow, rho), mu))
+            pipeNetwork.uedges[edge]["frictionFactor"] = ff
+
+        pipeNetwork.uedges[edge]["headloss"] = 0
+
+
+
+
 
     lastDelta = 99999999999
     lastResidual = 999999999999
@@ -215,6 +241,12 @@ def computedF(pipeNetwork, settings=defaultSettings):
                 pipeNetwork.digraph[nextnode][thisnode]["headloss"] = -hl
         hlLoops.append(hlLoop)
 
+    #small step just to update headlosses for any edges not on a loop:
+    for edge in pipeNetwork.edges:
+        if edge not in pipeNetwork.edgesOnLoop:
+            pipeNetwork.edges[edge]["headloss"] = fluidmech.calchl(pipeNetwork.edges[edge]["k"], pipeNetwork.edges[edge]["flow"], pipeNetwork.edges[edge]["pumpHeadGain"])
+
+
     ##STEP 4 For each loop, find sum head losses (sum kQ^n)
     sumhlLoops = []
     for loop in hlLoops:
@@ -292,8 +324,13 @@ class PipeNetwork:
     def __init__(self, nodes: pd.DataFrame, edges: pd.DataFrame):
 
         # TODO: Write input checker
-        # mandatoryAttributes = ["to","from","name","flow","length","daim"]
+        mandatoryEdgeAttributes = ["to","from","name","flow","length","diam"]
+        for MA in mandatoryEdgeAttributes:
+            if MA not in edges:
+                raise KeyError("Error! the pipe network is missing the " + MA + " attribute.")
         # mustHaveOneAttribute = ["pipeRoughness","frictionFactor"]
+        if 'frictionFactor' not in edges and 'pipeRoughness' not in edges:
+            raise KeyError("Error! the pipe edges must specify a friction factor, or a pipe roughness or both.")
         # optionalAttributes = ["pumpHeadGain"]
 
         self.digraph = nx.from_pandas_edgelist(edges, 'from', 'to',
@@ -309,9 +346,14 @@ class PipeNetwork:
         self.edges = self.digraph.edges
         self.nodes = self.digraph.nodes
         self.uedges = self.ugraph.edges
+        self.edgesOnLoop = set(e for loop in self.loops for e in loop)
 
         self.history = []
         self.appendHistory(999999, 9999999)
+
+
+
+
 
     def residual(self):
         return computeP(self)[1][0]

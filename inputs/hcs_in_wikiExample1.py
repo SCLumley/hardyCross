@@ -16,8 +16,8 @@ edges = pd.DataFrame({
     'to':['N1','N2','N3','N3','N4','N4','Si'],
     'flow':[ 10, 5, 5, 0, 5, 5,10],
     'length':[5,10, 10, 10, 10,10,5],
-    'diam':[ 0.3, 0.3, 0.1, 0.3, 0.1, 0.3, 0.3 ],
-    'pumpHeadGain':[ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    'diam':[ 0.3, 0.3, 0.3, 0.3, 0.1, 0.3, 0.3 ],
+    'pumpHeadGain':[ 0.0, 10000.0, 0.0, 0.0, 0.0, 0.0, 0.0 ],
     'frictionFactor':[ 0.000001, 0.00294093238243111, 0.0147046619121555,0.00294093238243111, 0.0147046619121555, 0.00294093238243111,0.000001],
     'pipeRoughness':[ 0.001, 0.0026, 0.036,0.0026, 0.0026, 0.0026,0.0001]
 })
@@ -27,9 +27,10 @@ settings = {
     "deltaConv": 1e-3,
     "residualConv": -1,
     "Printout": False,
-    "maxruns": 100,
+    "maxruns": 100000,
     "dynamicFF": True,
     "monotonic": False,
     "outstring": "wiki_example_1",
-    "visualise": True
+    "visualise": True,
+    "accelerator" : 0.2
 }

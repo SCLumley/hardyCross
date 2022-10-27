@@ -26,7 +26,7 @@ def calcff(eps,diam,re):
     if re > 64 and re < 2300:
         return 64/re
     else:
-        return 0.25 * math.log10(((eps/(diam*1000))/3.715) + 15/re)**-2
+        return 0.25 *( math.log10(((eps/diam)/3.715) + 5.74/(re**0.9)) )**-2
 
 def calck(length,diam,ff ):
     k = (length * 8 * ff) / (9.81 * (math.pi ** 2) * diam ** 5)
@@ -48,7 +48,7 @@ def fullcalchl(Q,length,diam,eps,pump=0,rho=stprho,mu=stpmu):
     elif re > 64 and re <= 2300:
         ff=64/re
     elif re > 2300:
-        ff=0.25 * math.log10(((eps/(diam*1000))/3.715) + 15/re)**-2
+        ff=0.25 *( math.log10(((eps/diam)/3.715) + 5.74/(re**0.9)) )**-2
     else:
         raise ValueError('reynolds number out of bounds')
 

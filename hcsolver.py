@@ -37,12 +37,14 @@ def solve(pipeNetwork, settings=defaultSettings):
     for edge in pipeNetwork.edges:
         if 'frictionFactor' not in pipeNetwork.edges[edge]:
             if Printout:
-                print("Initial friction factor not specified. Calculating from pipe characteristics and initial flow.")
+                print("Initial friction factor not specified. Calculating from pipe characteristics and initial flow.:")
             flow = pipeNetwork.edges[edge]["flow"]
             diam = pipeNetwork.edges[edge]["diam"]
             pipeRoughness = pipeNetwork.edges[edge]["pipeRoughness"]
             ff = fluidmech.calcff(pipeRoughness, diam, fluidmech.calcRe(diam, fluidmech.calcmdot(flow, rho), mu))
             pipeNetwork.edges[edge]["frictionFactor"] = ff
+            if Printout:
+                print(pipeNetwork.edges[edge])
         pipeNetwork.edges[edge]["headloss"] = 0
 
     for edge in pipeNetwork.uedges:
@@ -54,10 +56,6 @@ def solve(pipeNetwork, settings=defaultSettings):
             pipeNetwork.uedges[edge]["frictionFactor"] = ff
 
         pipeNetwork.uedges[edge]["headloss"] = 0
-
-
-
-
 
     lastDelta = 99999999999
     lastResidual = 999999999999
@@ -71,9 +69,10 @@ def solve(pipeNetwork, settings=defaultSettings):
             if Printout:
                 print("Iteration: ", iterationCounter)
 
+            #Main calculation executed in each loop
             (currentDelta, currentResidual) = iterate(pipeNetwork, settings)
-            print("Iteration, convergence criterion, Residual:", iterationCounter, currentDelta, currentResidual)
 
+            print("Iteration, convergence criterion, Residual:", iterationCounter, currentDelta, currentResidual)
             if (currentDelta < deltaConv or deltaConv < 0) and (currentResidual < residualConv or residualConv < 0):
                 print("Success! Convergence criterion reached")
                 run = False
@@ -88,7 +87,6 @@ def solve(pipeNetwork, settings=defaultSettings):
 
             lastDelta = currentDelta
             lastResidual = currentResidual
-
 
             # printout Data
             if Printout:
@@ -120,26 +118,21 @@ def iterate(pipeNetwork, settings=defaultSettings):
 def computeP(pipeNetwork, settings=defaultSettings):
     Printout = settings["Printout"]
 
+    if Printout:
+        for node in pipeNetwork.nodes:
+            print(pipeNetwork.nodes[node])
+
     flows = np.array([[e[-1] ** 2 for e in pipeNetwork.edges(data='flow')]]).transpose()
-
-    #    print("flows1",flows)
     hydraulicResistances = np.array([[k[-1] for k in pipeNetwork.edges(data='c')]]).transpose()
-    #    print("hydraulicRes",hydraulicResistances)
     pumpheadGains = np.array([[p[-1] for p in pipeNetwork.edges(data='pumpHeadGain')]]).transpose()
-    #    print("pumpheadGains",pumpheadGains)
-
-    #    print("product", hydraulicResistances * pumpheadGains)
     flows = flows + hydraulicResistances * pumpheadGains
-
-    #    print("flows2",flows)
-
     conductanceMat = nx.incidence_matrix(pipeNetwork.digraph, oriented=True, weight='c').toarray().transpose()
 
     # Precondition matrix with known boundary conditions
     pressureBoundaries = np.array([[0.0] * len(pipeNetwork.edges)]).transpose()
     i = 0
     for node in pipeNetwork.nodes:
-        if pipeNetwork.nodes[node]['pboundary']:
+        if 'pboundary' in pipeNetwork.nodes[node] and pipeNetwork.nodes[node]['pboundary']:
             pressureBoundaries += np.array([conductanceMat[:, i]]).transpose() * pipeNetwork.nodes[node][
                 'pressure']
             conductanceMat = np.delete(conductanceMat, i, 1)
@@ -148,13 +141,13 @@ def computeP(pipeNetwork, settings=defaultSettings):
         print("solving", conductanceMat, "\n x pressures =", flows, "-\n", pressureBoundaries)
     solution = np.linalg.lstsq(conductanceMat, (flows - pressureBoundaries), rcond=None)
     if Printout:
-        print("pressure Residuals:", solution[1])
+        print("Solution and Residuals:", solution)
     pressures = solution[0]
 
     i = 0
     s = 0
     for node in pipeNetwork.nodes:
-        if not pipeNetwork.nodes[node]['pboundary']:
+        if 'pboundary' in pipeNetwork.nodes[node] and not pipeNetwork.nodes[node]['pboundary']:
             pipeNetwork.nodes[node]['pressure'] = pressures[i - s][0]
         else:
             s += 1
@@ -167,13 +160,10 @@ def computedF(pipeNetwork, settings=defaultSettings):
     dynamicFF = settings["dynamicFF"]
     rho = settings["rho"]
     mu = settings["mu"]
-    deltaConv = settings["deltaConv"]
-    residualConv = settings["residualConv"]
-    maxruns = settings["maxruns"]
-    monotonic = settings["monotonic"]
+
 
     ##STEP 3.1 for every edge, update hydraulic resistance and conductance (k and c where k=1/c),
-    # and calculate headlosses and derivatives
+    # and calculate headlosses (kQ^2) and derivatives
     for edge in pipeNetwork.edges:
         flow = pipeNetwork.edges[edge]["flow"]
         length = pipeNetwork.edges[edge]["length"]
@@ -181,10 +171,11 @@ def computedF(pipeNetwork, settings=defaultSettings):
         pump = pipeNetwork.edges[edge]["pumpHeadGain"]
         pipeRoughness = pipeNetwork.edges[edge]["pipeRoughness"]
         if dynamicFF:
-            pipeNetwork.edges[edge]["frictionFactor"] = fluidmech.calcff(pipeRoughness, diam,
-                                                                         fluidmech.calcRe(diam,
-                                                                                          fluidmech.calcmdot(flow, rho),
-                                                                                          mu))
+            pipeNetwork.edges[edge]["frictionFactor"] = fluidmech.calcff(
+                    pipeRoughness,
+                    diam,
+                    fluidmech.calcRe(diam, fluidmech.calcmdot(flow, rho),mu)
+                )
         ff = pipeNetwork.edges[edge]["frictionFactor"]
         k = fluidmech.calck(length, diam, ff)
         pipeNetwork.edges[edge]['k'] = k
@@ -199,27 +190,10 @@ def computedF(pipeNetwork, settings=defaultSettings):
         if ff != 0 and length != 0:
             pipeNetwork.edges[edge]['c'] = -1 / k
         else:
-            pipeNetwork.edges[edge]['c'] = 1.7976931348623158e+308
+            pipeNetwork.edges[edge]['c'] = float('inf') # zero resistance implies infinite conductance.
 
-    # for edge in pipeNetwork.uedges:
-    #     flow = pipeNetwork.uedges[edge]["flow"]
-    #     length = pipeNetwork.uedges[edge]["length"]
-    #     diam = pipeNetwork.uedges[edge]["diam"]
-    #     if dynamicFF:
-    #         pipeRoughness = pipeNetwork.uedges[edge]["pipeRoughness"]
-    #         pipeNetwork.uedges[edge]["frictionFactor"] = fluidmech.calcff(pipeRoughness, diam,
-    #                                                                       fluidmech.calcRe(diam,
-    #                                                                                        fluidmech.calcmdot(flow,
-    #                                                                                                           rho), mu))
-    #     ff = pipeNetwork.uedges[edge]["frictionFactor"]
-    #     k = fluidmech.calck(length, diam, ff)
-    #     pipeNetwork.uedges[edge]['k'] = k
-    #     if ff != 0 and length != 0:
-    #         pipeNetwork.uedges[edge]['c'] = -1 / k
-    #     else:
-    #         pipeNetwork.uedges[edge]['c'] = 1.7976931348623158e+308
 
-    ##STEP 3.2 for each loop, determine head loss (kQ^n) in clockwise and counterclockwise directions.
+    ##STEP 3.2 for each loop, determine head loss in clockwise and counterclockwise directions.
     ##CW and CCW is determined as following and anti-following the direction of the graph.
 
     hlLoops = []
@@ -309,28 +283,33 @@ def updateFlows(pipeNetwork, deltaFlowLoops, settings=defaultSettings):
 class PipeNetwork:
     def __init__(self, nodes: pd.DataFrame, edges: pd.DataFrame):
 
-        # TODO: Write input checker
+        #input checking
         mandatoryEdgeAttributes = ["to","from","name","flow","length","diam"]
         for MA in mandatoryEdgeAttributes:
             if MA not in edges:
-                raise KeyError("Error! the pipe network is missing the " + MA + " attribute.")
+                raise KeyError("Error! the pipe network is missing the " + MA + " edge attribute.")
         # mustHaveOneAttribute = ["pipeRoughness","frictionFactor"]
         if 'frictionFactor' not in edges and 'pipeRoughness' not in edges:
             raise KeyError("Error! the pipe edges must specify a friction factor, or a pipe roughness or both.")
-        # optionalAttributes = ["pumpHeadGain"]
+        if 'pumpHeadGain' not in edges:
+            edges['pumpHeadGain'] = 0.0
+
+
+
+        mandatoryNodeAttributes = ["name", "pressure", "flow", "pboundary","fboundary"]
+        for MA in mandatoryNodeAttributes:
+            if MA not in nodes:
+                raise KeyError("Error! the pipe network is missing the " + MA + " node attribute.")
+
+        #TODO write something to check boundary conditions are coherent
+
+
 
         self.digraph = nx.from_pandas_edgelist(edges, 'from', 'to',
                                                edges.columns.values.tolist(),
                                                create_using=nx.DiGraph())
-
         nx.set_node_attributes(self.digraph, nodes.set_index('name').to_dict('index'))
-
         self.ugraph = self.digraph.to_undirected(as_view=True)
-
-            #nx.from_pandas_edgelist(edges, 'from', 'to',
-            #                                  edges.columns.values.tolist(),
-            #                                  create_using=nx.Graph())
-
         self.loops = list(nx.cycle_basis(self.ugraph))
         self.edges = self.digraph.edges
         self.nodes = self.digraph.nodes
@@ -340,7 +319,24 @@ class PipeNetwork:
         self.history = []
         self.appendHistory(999999, 9999999)
 
+        print(nodes)
+        print(edges)
 
+
+    def cleanEmpty(self):
+        delnodes = []
+        for n in self.nodes:
+            if self.nodes[n] == {}:
+                delnodes.append(n)
+        for n in delnodes:
+            self.digraph.remove_node(n)
+
+        deledges = []
+        for e in self.edges:
+            if self.edges[e] == {}:
+                deledges.append(e)
+        for e in deledges:
+            self.digraph.remove_edge(e)
 
 
 
@@ -353,9 +349,8 @@ class PipeNetwork:
         return totDelta
 
     def visualise(self, filepath, settings=defaultSettings):
-
+        self.cleanEmpty()
         plt.rcParams["figure.figsize"] = (16, 9)
-
         pos = nx.kamada_kawai_layout(self.digraph, weight='length')
         edgeWidths = [self.digraph[u][v]['flow'] / (0.25 * nx.to_pandas_edgelist(self.digraph)['flow'].max()) for u, v
                       in self.edges()]
@@ -379,7 +374,7 @@ class PipeNetwork:
 
         if settings["visDisplayLvl"] == 2:
             edge_labels = dict([((n1, n2), d['name'] + "\nQ:" + "{:.2e}".format(d['flow']) + "\nhl:" + "{:.2e}".format(
-                abs(d['headloss'])))
+                d['headloss']))
                                 for n1, n2, d in self.digraph.edges(data=True)])
 
             node_labels = dict([(n, n + "\nP:" + "{:.2e}".format(d['pressure']))
@@ -413,7 +408,8 @@ class PipeNetwork:
     def historyCSV(self):
         dfcolumns = ["Iteration", "convcrit", "residual"]
         for node in self.nodes:
-            dfcolumns.append(str(node) + '_P')
+            if 'pboundary' in self.nodes[node]:
+                dfcolumns.append(str(node) + '_P')
         for edge in self.edges:
             dfcolumns.append(str(self.edges[edge]["name"]) + '_F')
 

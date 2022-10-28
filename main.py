@@ -65,6 +65,8 @@ if __name__ == '__main__':
 
     hc.solve(pipenetwork,settings)
 
+#    pipenetwork.cleanEmpty()
+
     historyOutput="out_"+settings["outstring"]+"_hist.csv"
     histcsv=open(os.path.join(jobdir,historyOutput),'w')
     histcsv.write(pipenetwork.historyCSV())

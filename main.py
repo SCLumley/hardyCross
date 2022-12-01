@@ -1,4 +1,5 @@
 import hcsolver as hc
+import pipeNetwork as pn
 import argparse
 import os
 import pandas as pd
@@ -43,11 +44,6 @@ if __name__ == '__main__':
     vars = input.read()
     exec(vars)
 
-    inputSettings = settings.copy()
-    settings=defaultSettings
-    settings.update(inputSettings)
-
-
 
     if args.nodeInput is not None:
         nodes = pd.read_csv(args.nodeInput)
@@ -61,11 +57,10 @@ if __name__ == '__main__':
     if edges is None:
         raise ValueError('Edges have not been specified in the supplied inputs.')
 
-    pipenetwork = hc.PipeNetwork(nodes, edges)
+    pipenetwork = pn.PipeNetwork(nodes, edges)
+    solver = hc.Solver(settings)
 
-    hc.solve(pipenetwork,settings)
-
-#    pipenetwork.cleanEmpty()
+    solver.solve(pipenetwork)
 
     historyOutput="out_"+settings["outstring"]+"_hist.csv"
     histcsv=open(os.path.join(jobdir,historyOutput),'w')
@@ -84,4 +79,4 @@ if __name__ == '__main__':
 
     if settings["visualise"]:
         pngOutput = "out_" + settings["outstring"] + "_vis.png"
-        pipenetwork.visualise(os.path.join(jobdir,pngOutput),settings)
+        pipenetwork.visualise(os.path.join(jobdir,pngOutput),settings["vislvl"])

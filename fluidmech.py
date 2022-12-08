@@ -1,13 +1,10 @@
 import math
-import sympy as sym
 
 
 ##Using NIST Standard temperature and pressure: 293.15 K, 101325 Pa
 stprho = 997.77 # density in kg . m^(-3)
 stpmu = 1.0005E-3 # Dynamic viscosity in pa . s
 
-#define symbols for symbolic derivative
-mdot, rho, Q, diam, mu, eps, re, length, ff, k, pump = sym.symbols('mdot rho Q diam mu eps re length ff k pump', real=True)
 def calcQ(mdot,rho=stprho):
     Q = mdot/rho
     return Q
@@ -55,13 +52,6 @@ def fullcalchl(Q,length,diam,eps,pump=0,rho=stprho,mu=stpmu):
     k = (length * 8 * ff) / (9.81 * (math.pi ** 2) * diam ** 5)
     hl = k * Q**2 - pump
     return hl
-
-def funcdhldQ(Q,length,diam,eps,pump=0):
-    return sym.diff(fullcalchl(Q,length,diam,eps,pump),Q)
-
-def dhldQ(Q_in,length_in,diam_in,eps_in,pump_in=0):
-    return funcdhldQ(Q,length,diam,eps,pump).evalf(subs={Q: Q_in, length: length_in,diam: diam_in,eps: eps_in,pump: pump_in})
-
 
 def numerical_dhldQ(Q,length,diam,eps,pump=0,rho=stprho,mu=stpmu,convcrit=1e-6):
     dQ = 10
